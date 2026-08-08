@@ -1,11 +1,16 @@
 ---
 title: Energy is a resource, too
 date: 2026-08-08
-summary: The habits that make you reliable can quietly cost you. On boundaries, directness, and less guilt about taking up space.
+summary: A reflection that started with a DISC test. On boundaries, directness, and less guilt about taking up space.
 category: life
 tags: [work, boundaries, lessons]
 lang: en
 ---
+
+This started with a DISC assessment I took on January 7, 2026. I expected
+another forgettable workplace personality test. Instead, the results put
+words to something I'd been feeling for a while — and I've been sitting with
+them ever since.
 
 I've spent years learning how to show up for others.
 
