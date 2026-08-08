@@ -1,0 +1,76 @@
+---
+/**
+ * Local hearts + optional view counter.
+ * Hearts are stored per-browser in localStorage — honest microcopy reflects that.
+ * Views appear only when GOATCOUNTER_CODE is set (see src/lib/analytics.ts).
+ */
+import { GOATCOUNTER_CODE } from '../lib/analytics';
+
+interface Props {
+  postId: string;
+}
+
+const { postId } = Astro.props;
+---
+
+<div class="post-reactions" data-post-id={postId} data-gc={GOATCOUNTER_CODE}>
+  <button class="heart-btn" id="heart-btn" aria-label="Send a heart">
+    <span class="heart-icon" aria-hidden="true">♥</span>
+    <span class="heart-count" id="heart-count">0</span>
+  </button>
+  <span class="heart-note">hearts from you, kept on this device</span>
+  <span class="view-count" id="view-count" hidden></span>
+</div>
+
+<script>
+  const wrap = document.querySelector<HTMLElement>('.post-reactions');
+  const btn = document.getElementById('heart-btn');
+  const countEl = document.getElementById('heart-count');
+  const viewEl = document.getElementById('view-count');
+
+  if (wrap && btn && countEl) {
+    const key = `hearts:${wrap.dataset.postId}`;
+    let count = parseInt(localStorage.getItem(key) || '0', 10);
+    countEl.textContent = String(count);
+
+    const reduceMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
+
+    btn.addEventListener('click', () => {
+      count = Math.min(count + 1, 999);
+      localStorage.setItem(key, String(count));
+      countEl.textContent = String(count);
+
+      if (reduceMotion) return;
+
+      // pop the button
+      btn.classList.remove('pop');
+      void (btn as HTMLElement).offsetWidth; // restart animation
+      btn.classList.add('pop');
+
+      // burst a floating heart (sparkle every 10th)
+      const fly = document.createElement('span');
+      fly.className = 'heart-fly';
+      fly.textContent = count % 10 === 0 ? '✨' : '♥';
+      fly.style.left = `${8 + Math.random() * 24}px`;
+      btn.appendChild(fly);
+      setTimeout(() => fly.remove(), 900);
+    });
+
+    // optional view count via GoatCounter's public visitor-counter endpoint
+    const code = wrap.dataset.gc;
+    if (code && viewEl) {
+      const path = encodeURIComponent(location.pathname);
+      fetch(`https://${code}.goatcounter.com/counter/${path}.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d && d.count) {
+            viewEl.textContent = `${d.count} views`;
+            viewEl.hidden = false;
+          }
+        })
+        .catch(() => {}); // counter is decoration, never an error
+    }
+  }
+</script>
