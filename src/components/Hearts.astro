@@ -1,12 +1,9 @@
 ---
 /**
- * Synced hearts + view counter, both via GoatCounter.
- * - Views: pageview count for this URL.
- * - Hearts: custom GoatCounter events (path "hearts-<postId>").
- *   GoatCounter dedupes by visitor → one counted heart per reader per post.
- * Both fail silently if GoatCounter is unreachable — decoration, never errors.
+ * Synced hearts (Cloudflare Worker) + view counter (GoatCounter).
+ * Every tap increments the global count. Fails silently — decoration, never errors.
  */
-import { GOATCOUNTER_CODE } from '../lib/analytics';
+import { GOATCOUNTER_CODE, HEARTS_API } from '../lib/analytics';
 
 interface Props {
   postId: string;
@@ -15,7 +12,12 @@ interface Props {
 const { postId } = Astro.props;
 ---
 
-<div class="post-reactions" data-post-id={postId} data-gc={GOATCOUNTER_CODE}>
+<div
+  class="post-reactions"
+  data-post-id={postId}
+  data-gc={GOATCOUNTER_CODE}
+  data-hearts-api={HEARTS_API}
+>
   <button class="heart-btn" id="heart-btn" aria-label="Send a heart">
     <span class="heart-icon" aria-hidden="true">♥</span>
     <span class="heart-count" id="heart-count">–</span>
@@ -33,29 +35,23 @@ const { postId } = Astro.props;
 
   if (wrap && btn && countEl) {
     const id = wrap.dataset.postId;
-    const code = wrap.dataset.gc;
-    const heartPath = `hearts-${id}`;
-    const heartedKey = `hearted:${id}`;
-    let total = 0;
+    const api = wrap.dataset.heartsApi;
+    const gc = wrap.dataset.gc;
+    const localKey = `hearts:${id}`;
+    const MAX_TAPS_PER_VISIT = 50; // stay polite to the free tier
 
-    const parseCount = (raw: unknown): number => {
-      const n = parseInt(String(raw).replace(/[^0-9]/g, ''), 10);
-      return Number.isFinite(n) ? n : 0;
+    const setCount = (n: number) => {
+      countEl.textContent = String(n);
     };
 
-    // load synced heart total
-    if (code) {
-      fetch(`https://${code}.goatcounter.com/counter/${encodeURIComponent(heartPath)}.json`)
+    // initial load
+    if (api) {
+      fetch(`${api}/hearts/${id}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          total = d ? parseCount(d.count) : 0;
-          countEl.textContent = String(total);
-        })
-        .catch(() => {
-          countEl.textContent = '0';
-        });
+        .then((d) => setCount(d ? d.count : 0))
+        .catch(() => setCount(parseInt(localStorage.getItem(localKey) || '0', 10)));
     } else {
-      countEl.textContent = '0';
+      setCount(parseInt(localStorage.getItem(localKey) || '0', 10));
     }
 
     const reduceMotion = window.matchMedia(
@@ -79,35 +75,29 @@ const { postId } = Astro.props;
     btn.addEventListener('click', () => {
       taps++;
       animate(taps);
+      if (noteEl && taps === 1) noteEl.textContent = 'thanks for the heart ♥';
 
-      // only the first tap per reader counts globally
-      if (localStorage.getItem(heartedKey)) return;
-      localStorage.setItem(heartedKey, '1');
-
-      total++;
-      countEl.textContent = String(total);
-      if (noteEl) noteEl.textContent = 'thanks for the heart ♥';
-
-      // send the event via GoatCounter (script loads async — retry briefly)
-      const send = (attempts: number) => {
-        const gc = (window as any).goatcounter;
-        if (gc && typeof gc.count === 'function') {
-          gc.count({ path: heartPath, title: `heart: ${id}`, event: true });
-        } else if (attempts > 0) {
-          setTimeout(() => send(attempts - 1), 500);
-        }
-      };
-      send(10);
+      if (api && taps <= MAX_TAPS_PER_VISIT) {
+        fetch(`${api}/hearts/${id}`, { method: 'POST' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => d && setCount(d.count))
+          .catch(() => {});
+      } else if (!api) {
+        const n = parseInt(localStorage.getItem(localKey) || '0', 10) + 1;
+        localStorage.setItem(localKey, String(n));
+        setCount(n);
+      }
     });
 
-    // per-post view count
-    if (code && viewEl) {
+    // per-post view count (GoatCounter)
+    if (gc && viewEl) {
       const path = encodeURIComponent(location.pathname);
-      fetch(`https://${code}.goatcounter.com/counter/${path}.json`)
+      fetch(`https://${gc}.goatcounter.com/counter/${path}.json`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (d) {
-            viewEl.textContent = `${parseCount(d.count)} views`;
+            const n = parseInt(String(d.count).replace(/[^0-9]/g, ''), 10) || 0;
+            viewEl.textContent = `${n} views`;
             viewEl.hidden = false;
           }
         })
