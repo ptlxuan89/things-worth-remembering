@@ -1,0 +1,115 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import PostCard from '../../components/PostCard.astro';
+
+const posts = (await getCollection('posts')).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+);
+
+const categories = ['all', 'tech', 'life', 'notes'];
+const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
+---
+
+<Base title="all posts" description="Every post — tech, life, and short notes.">
+  <section class="hero">
+    <h1>all posts</h1>
+    <p>{posts.length} entries and counting. Filter by category or tag.</p>
+  </section>
+
+  <div class="filter-bar" role="group" aria-label="Filter by category">
+    {categories.map((c) => (
+      <button
+        class="filter-btn"
+        data-filter-category={c}
+        aria-pressed={c === 'all' ? 'true' : 'false'}
+      >
+        {c}
+      </button>
+    ))}
+  </div>
+
+  {allTags.length > 0 && (
+    <div class="tag-row" role="group" aria-label="Filter by tag">
+      {allTags.map((t) => (
+        <button class="tag-btn" data-filter-tag={t} aria-pressed="false">
+          #{t}
+        </button>
+      ))}
+    </div>
+  )}
+
+  <div class="post-list" id="post-list">
+    {posts.map((post) => <PostCard post={post} />)}
+  </div>
+  <p class="empty-state" id="empty-state" hidden>
+    nothing here (yet) — try another filter
+  </p>
+</Base>
+
+<script>
+  const cards = Array.from(
+    document.querySelectorAll<HTMLElement>('#post-list .post-card')
+  );
+  const catBtns = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('[data-filter-category]')
+  );
+  const tagBtns = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('[data-filter-tag]')
+  );
+  const emptyState = document.getElementById('empty-state');
+
+  let activeCategory = 'all';
+  let activeTag: string | null = null;
+
+  function apply() {
+    let visible = 0;
+    for (const card of cards) {
+      const cat = card.dataset.category;
+      const tags = (card.dataset.tags || '').split(',').filter(Boolean);
+      const okCat = activeCategory === 'all' || cat === activeCategory;
+      const okTag = !activeTag || tags.includes(activeTag);
+      const show = okCat && okTag;
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
+    }
+    if (emptyState) emptyState.hidden = visible > 0;
+
+    catBtns.forEach((b) =>
+      b.setAttribute(
+        'aria-pressed',
+        String(b.dataset.filterCategory === activeCategory)
+      )
+    );
+    tagBtns.forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.filterTag === activeTag))
+    );
+
+    const params = new URLSearchParams();
+    if (activeCategory !== 'all') params.set('c', activeCategory);
+    if (activeTag) params.set('t', activeTag);
+    const qs = params.toString();
+    history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
+  }
+
+  catBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      activeCategory = b.dataset.filterCategory || 'all';
+      apply();
+    })
+  );
+
+  tagBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      const t = b.dataset.filterTag || null;
+      activeTag = activeTag === t ? null : t;
+      apply();
+    })
+  );
+
+  // restore state from URL (?c=tech&t=astro)
+  const initial = new URLSearchParams(location.search);
+  activeCategory = initial.get('c') || 'all';
+  activeTag = initial.get('t');
+  apply();
+</script>

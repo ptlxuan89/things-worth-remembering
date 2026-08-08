@@ -1,0 +1,28 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { url } from '../lib/url';
+
+interface Props {
+  post: CollectionEntry<'posts'>;
+}
+
+const { post } = Astro.props;
+const { title, date, summary, category, tags } = post.data;
+const dateStr = date.toISOString().slice(0, 10);
+const isNote = category === 'notes';
+---
+
+<a
+  href={url(`/posts/${post.id}`)}
+  class:list={['post-card', 'quiet', { 'is-note': isNote }]}
+  data-category={category}
+  data-tags={tags.join(',')}
+>
+  <div class="post-meta">
+    <span class={`badge badge-${category}`}>#{category}</span>
+    <time datetime={dateStr}>{dateStr}</time>
+    {tags.map((t) => <span class="tag-chip">{t}</span>)}
+  </div>
+  <h3>{title}</h3>
+  <p class="summary">{summary}</p>
+</a>

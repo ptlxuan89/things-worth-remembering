@@ -1,0 +1,17 @@
+---
+import Base from '../layouts/Base.astro';
+import { url } from '../lib/url';
+---
+
+<Base title="not found" description="This page does not exist.">
+  <div class="lost">
+    <p class="big">404</p>
+    <p>
+      This page was, apparently, <em>not</em> worth remembering.<br />
+      (Or it moved. Or you typed it from memory. Happens to the best of us.)
+    </p>
+    <p>
+      <a href={url('/')}>go home</a> &nbsp;·&nbsp; <a href={url('/posts')}>browse all posts</a>
+    </p>
+  </div>
+</Base>

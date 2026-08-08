@@ -1,0 +1,55 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { url } from '../../lib/url';
+
+export async function getStaticPaths() {
+  const posts = (await getCollection('posts')).sort(
+    (a, b) => a.data.date.valueOf() - b.data.date.valueOf()
+  );
+  return posts.map((post, i) => ({
+    params: { slug: post.id },
+    props: {
+      post,
+      prev: posts[i - 1] ?? null,
+      next: posts[i + 1] ?? null,
+    },
+  }));
+}
+
+const { post, prev, next } = Astro.props;
+const { Content } = await render(post);
+const { title, date, summary, category, tags, lang } = post.data;
+const dateStr = date.toISOString().slice(0, 10);
+---
+
+<Base title={title} description={summary} ogType="article">
+  <article lang={lang}>
+    <header class="article-header">
+      <div class="post-meta">
+        <span class={`badge badge-${category}`}>#{category}</span>
+        <time datetime={dateStr}>{dateStr}</time>
+        {tags.map((t) => (
+          <a href={url(`/posts?t=${encodeURIComponent(t)}`)} class="tag-chip quiet">
+            {t}
+          </a>
+        ))}
+      </div>
+      <h1>{title}</h1>
+      <p class="summary">{summary}</p>
+    </header>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    <nav class="article-footer" aria-label="Post navigation">
+      <span>
+        {prev && <a href={url(`/posts/${prev.id}`)} class="quiet">← {prev.data.title}</a>}
+      </span>
+      <span>
+        {next && <a href={url(`/posts/${next.id}`)} class="quiet">{next.data.title} →</a>}
+      </span>
+    </nav>
+  </article>
+</Base>

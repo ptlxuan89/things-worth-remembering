@@ -1,0 +1,31 @@
+---
+import { url } from '../lib/url';
+
+const path = Astro.url.pathname;
+const isCurrent = (href: string) => path.startsWith(url(href));
+---
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <a href={url('/')} class="site-title quiet">things worth remembering</a>
+    <nav class="site-nav" aria-label="Main">
+      <a href={url('/posts')} class="quiet" aria-current={isCurrent('/posts') ? 'page' : undefined}>posts</a>
+      <a href={url('/about')} class="quiet" aria-current={isCurrent('/about') ? 'page' : undefined}>about</a>
+      <a href={url('/rss.xml')} class="quiet">rss</a>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon-sun" aria-hidden="true">☀</span>
+        <span class="icon-moon" aria-hidden="true">☾</span>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<script>
+  const btn = document.getElementById('theme-toggle');
+  btn?.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  });
+</script>
