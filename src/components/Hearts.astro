@@ -1,9 +1,9 @@
 ---
 /**
- * Synced hearts (Cloudflare Worker) + view counter (GoatCounter).
+ * Synced hearts (Cloudflare Worker) + view counter, both via Cloudflare Worker.
  * Every tap increments the global count. Fails silently — decoration, never errors.
  */
-import { GOATCOUNTER_CODE, HEARTS_API } from '../lib/analytics';
+import { HEARTS_API } from '../lib/analytics';
 
 interface Props {
   postId: string;
@@ -15,7 +15,6 @@ const { postId } = Astro.props;
 <div
   class="post-reactions"
   data-post-id={postId}
-  data-gc={GOATCOUNTER_CODE}
   data-hearts-api={HEARTS_API}
 >
   <button class="heart-btn" id="heart-btn" aria-label="Send a heart">
@@ -36,7 +35,6 @@ const { postId } = Astro.props;
   if (wrap && btn && countEl) {
     const id = wrap.dataset.postId;
     const api = wrap.dataset.heartsApi;
-    const gc = wrap.dataset.gc;
     const localKey = `hearts:${id}`;
     const MAX_TAPS_PER_VISIT = 50; // stay polite to the free tier
 
@@ -89,15 +87,16 @@ const { postId } = Astro.props;
       }
     });
 
-    // per-post view count (GoatCounter)
-    if (gc && viewEl) {
-      const path = encodeURIComponent(location.pathname);
-      fetch(`https://${gc}.goatcounter.com/counter/${path}.json`)
+    // per-post view count (Worker): count once per browser session
+    if (api && viewEl) {
+      const seenKey = `viewed:${id}`;
+      const method = sessionStorage.getItem(seenKey) ? 'GET' : 'POST';
+      fetch(`${api}/views/${id}`, { method })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (d) {
-            const n = parseInt(String(d.count).replace(/[^0-9]/g, ''), 10) || 0;
-            viewEl.textContent = `${n} views`;
+            sessionStorage.setItem(seenKey, '1');
+            viewEl.textContent = `${d.count} views`;
             viewEl.hidden = false;
           }
         })
