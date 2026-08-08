@@ -1,8 +1,10 @@
 ---
 /**
- * Local hearts + optional view counter.
- * Hearts are stored per-browser in localStorage — honest microcopy reflects that.
- * Views appear only when GOATCOUNTER_CODE is set (see src/lib/analytics.ts).
+ * Synced hearts + view counter, both via GoatCounter.
+ * - Views: pageview count for this URL.
+ * - Hearts: custom GoatCounter events (path "hearts-<postId>").
+ *   GoatCounter dedupes by visitor → one counted heart per reader per post.
+ * Both fail silently if GoatCounter is unreachable — decoration, never errors.
  */
 import { GOATCOUNTER_CODE } from '../lib/analytics';
 
@@ -16,9 +18,9 @@ const { postId } = Astro.props;
 <div class="post-reactions" data-post-id={postId} data-gc={GOATCOUNTER_CODE}>
   <button class="heart-btn" id="heart-btn" aria-label="Send a heart">
     <span class="heart-icon" aria-hidden="true">♥</span>
-    <span class="heart-count" id="heart-count">0</span>
+    <span class="heart-count" id="heart-count">–</span>
   </button>
-  <span class="heart-note">hearts from you, kept on this device</span>
+  <span class="heart-note" id="heart-note">hearts from readers</span>
   <span class="view-count" id="view-count" hidden></span>
 </div>
 
@@ -26,51 +28,90 @@ const { postId } = Astro.props;
   const wrap = document.querySelector<HTMLElement>('.post-reactions');
   const btn = document.getElementById('heart-btn');
   const countEl = document.getElementById('heart-count');
+  const noteEl = document.getElementById('heart-note');
   const viewEl = document.getElementById('view-count');
 
   if (wrap && btn && countEl) {
-    const key = `hearts:${wrap.dataset.postId}`;
-    let count = parseInt(localStorage.getItem(key) || '0', 10);
-    countEl.textContent = String(count);
+    const id = wrap.dataset.postId;
+    const code = wrap.dataset.gc;
+    const heartPath = `hearts-${id}`;
+    const heartedKey = `hearted:${id}`;
+    let total = 0;
+
+    const parseCount = (raw: unknown): number => {
+      const n = parseInt(String(raw).replace(/[^0-9]/g, ''), 10);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    // load synced heart total
+    if (code) {
+      fetch(`https://${code}.goatcounter.com/counter/${encodeURIComponent(heartPath)}.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          total = d ? parseCount(d.count) : 0;
+          countEl.textContent = String(total);
+        })
+        .catch(() => {
+          countEl.textContent = '0';
+        });
+    } else {
+      countEl.textContent = '0';
+    }
 
     const reduceMotion = window.matchMedia(
       '(prefers-reduced-motion: reduce)'
     ).matches;
 
-    btn.addEventListener('click', () => {
-      count = Math.min(count + 1, 999);
-      localStorage.setItem(key, String(count));
-      countEl.textContent = String(count);
-
+    const animate = (n: number) => {
       if (reduceMotion) return;
-
-      // pop the button
       btn.classList.remove('pop');
-      void (btn as HTMLElement).offsetWidth; // restart animation
+      void (btn as HTMLElement).offsetWidth;
       btn.classList.add('pop');
-
-      // burst a floating heart (sparkle every 10th)
       const fly = document.createElement('span');
       fly.className = 'heart-fly';
-      fly.textContent = count % 10 === 0 ? '✨' : '♥';
+      fly.textContent = n % 10 === 0 ? '✨' : '♥';
       fly.style.left = `${8 + Math.random() * 24}px`;
       btn.appendChild(fly);
       setTimeout(() => fly.remove(), 900);
+    };
+
+    let taps = 0;
+    btn.addEventListener('click', () => {
+      taps++;
+      animate(taps);
+
+      // only the first tap per reader counts globally
+      if (localStorage.getItem(heartedKey)) return;
+      localStorage.setItem(heartedKey, '1');
+
+      total++;
+      countEl.textContent = String(total);
+      if (noteEl) noteEl.textContent = 'thanks for the heart ♥';
+
+      // send the event via GoatCounter (script loads async — retry briefly)
+      const send = (attempts: number) => {
+        const gc = (window as any).goatcounter;
+        if (gc && typeof gc.count === 'function') {
+          gc.count({ path: heartPath, title: `heart: ${id}`, event: true });
+        } else if (attempts > 0) {
+          setTimeout(() => send(attempts - 1), 500);
+        }
+      };
+      send(10);
     });
 
-    // optional view count via GoatCounter's public visitor-counter endpoint
-    const code = wrap.dataset.gc;
+    // per-post view count
     if (code && viewEl) {
       const path = encodeURIComponent(location.pathname);
       fetch(`https://${code}.goatcounter.com/counter/${path}.json`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (d && d.count) {
-            viewEl.textContent = `${d.count} views`;
+          if (d) {
+            viewEl.textContent = `${parseCount(d.count)} views`;
             viewEl.hidden = false;
           }
         })
-        .catch(() => {}); // counter is decoration, never an error
+        .catch(() => {});
     }
   }
 </script>
